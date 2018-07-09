@@ -33,7 +33,7 @@
 #define CUSTOM_ESP_WIFI_SSID      "Caverna do Dragao_Room"
 #define CUSTOM_ESP_WIFI_PASS      "BANANAchesterLANCER" 
 #define DEBUG 0
-static const char *UARTTAG = "uart_events";
+static const char *UARTTAG = "UART_events";
 static const char *SYSTAG = "ESP32_system";
 static const char *WIFITAG = "WIFI";
 #define PATTERN_CHR_NUM    (3)         /*!< Set the number of consecutive and identical characters received by receiver which defines a UART pattern*/
@@ -60,12 +60,21 @@ EventGroupHandle_t wifi_event_group;
 void prvSetupHardware( void );
 static void vUartEventTask(void *pvParameters);
 static esp_err_t event_handler(void *ctx, system_event_t *event);
-void wifi_init_sta();
+void wifi_init_sta(void);
+void uart2_init(void);
 
 
 
 void app_main()
 {
+    //Set System log level
+    esp_log_level_set(SYSTAG, ESP_LOG_INFO);
+    //Set UART log level
+    esp_log_level_set(UARTTAG, ESP_LOG_INFO);
+    //Set Wifi log level
+    esp_log_level_set(WIFITAG, ESP_LOG_INFO);
+    
+
     ESP_LOGI(SYSTAG, "Initialing hardware");
     prvSetupHardware();
     
@@ -176,19 +185,18 @@ static esp_err_t event_handler(void *ctx, system_event_t *event)
         esp_wifi_connect();
         break;
     case SYSTEM_EVENT_STA_GOT_IP:
-        ESP_LOGI(WIFITAG, "got ip:%s",
-                 ip4addr_ntoa(&event->event_info.got_ip.ip_info.ip));
+        ESP_LOGI(WIFITAG, "got ip:%s", ip4addr_ntoa(&event->event_info.got_ip.ip_info.ip));
         xEventGroupSetBits(wifi_event_group, WIFI_CONNECTED_BIT);
         break;
     case SYSTEM_EVENT_AP_STACONNECTED:
         ESP_LOGI(WIFITAG, "station:"MACSTR" join, AID=%d",
-                 MAC2STR(event->event_info.sta_connected.mac),
-                 event->event_info.sta_connected.aid);
+        MAC2STR(event->event_info.sta_connected.mac),
+                   event->event_info.sta_connected.aid);
         break;
     case SYSTEM_EVENT_AP_STADISCONNECTED:
         ESP_LOGI(WIFITAG, "station:"MACSTR"leave, AID=%d",
-                 MAC2STR(event->event_info.sta_disconnected.mac),
-                 event->event_info.sta_disconnected.aid);
+        MAC2STR(event->event_info.sta_disconnected.mac),
+                   event->event_info.sta_disconnected.aid);
         break;
     case SYSTEM_EVENT_STA_DISCONNECTED:
         esp_wifi_connect();
@@ -202,6 +210,21 @@ static esp_err_t event_handler(void *ctx, system_event_t *event)
 
 void prvSetupHardware( void )
 {
+  //Initialize NVS
+  esp_err_t ret = nvs_flash_init();
+  if (ret == ESP_ERR_NVS_NO_FREE_PAGES) {
+    ESP_ERROR_CHECK(nvs_flash_erase());
+    ret = nvs_flash_init();
+  }
+  ESP_ERROR_CHECK(ret);
+
+  wifi_init_sta();
+  uart2_init();
+}
+
+void uart2_init(void)
+{
+
   xUart2Config.baud_rate = 9600;
   xUart2Config.data_bits = UART_DATA_8_BITS;
   xUart2Config.parity =  UART_PARITY_DISABLE;
@@ -213,42 +236,15 @@ void prvSetupHardware( void )
 
   uart_driver_install(UART_NUM_2,200,200,50,&xUart2Queue,ESP_INTR_FLAG_LEVEL2);
 
-  esp_log_level_set(UARTTAG, ESP_LOG_INFO);
   /* Configure parameters of an UART driver,
    * communication pins and install the driver */
-  //Set UART log level
-  esp_log_level_set(UARTTAG, ESP_LOG_INFO);
   //Set uart pattern detect function.
   uart_enable_pattern_det_intr(UART_NUM_2, '+', PATTERN_CHR_NUM, 10000, 10, 10);
   //Reset the pattern queue length to record at most 20 pattern positions.
   //uart_pattern_queue_reset(UART_NUM_2, 20);
-  
-    for(uint8_t t = 4; t > 0; t--)
-    {
-      char rest = 200;
-      uart_write_bytes(UART_NUM_2, &rest,1);
-      uart_tx_chars(UART_NUM_2, "[SETUP] W\n", 10);
-      uart_wait_tx_done(UART_NUM_2, portMAX_DELAY);
-    }
-
-  esp_log_level_set(SYSTAG, ESP_LOG_INFO);
-
-  esp_log_level_set(WIFITAG, ESP_LOG_INFO);
-
-  //Initialize NVS
-  esp_err_t ret = nvs_flash_init();
-  if (ret == ESP_ERR_NVS_NO_FREE_PAGES) {
-    ESP_ERROR_CHECK(nvs_flash_erase());
-    ret = nvs_flash_init();
-  }
-  ESP_ERROR_CHECK(ret);
-
-  wifi_init_sta();
 }
 
-
-
-void wifi_init_sta()
+void wifi_init_sta(void)
 {
     wifi_event_group = xEventGroupCreate();
 
