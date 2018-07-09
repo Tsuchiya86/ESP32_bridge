@@ -137,7 +137,9 @@ hello_world_main.o: \
  C:/msys32/home/AllyKalaf/esp/esp-idf/components/nvs_flash/include/nvs_flash.h \
  C:/msys32/home/AllyKalaf/esp/esp-idf/components/nvs_flash/include/nvs.h \
  C:/msys32/home/AllyKalaf/esp/esp-idf/components/lwip/include/lwip/lwip/err.h \
- C:/msys32/home/AllyKalaf/esp/esp-idf/components/lwip/include/lwip/lwip/sys.h
+ C:/msys32/home/AllyKalaf/esp/esp-idf/components/lwip/include/lwip/lwip/sys.h \
+ C:/msys32/home/AllyKalaf/esp/esp-idf/components/esp_http_client/include/esp_http_client.h \
+ C:/msys32/home/AllyKalaf/esp/esp-idf/components/nghttp/port/include/http_parser.h
 
 C:/msys32/home/AllyKalaf/esp/esp-idf/components/newlib/include/stdio.h:
 
@@ -414,4 +416,8 @@ C:/msys32/home/AllyKalaf/esp/esp-idf/components/nvs_flash/include/nvs.h:
 C:/msys32/home/AllyKalaf/esp/esp-idf/components/lwip/include/lwip/lwip/err.h:
 
 C:/msys32/home/AllyKalaf/esp/esp-idf/components/lwip/include/lwip/lwip/sys.h:
+
+C:/msys32/home/AllyKalaf/esp/esp-idf/components/esp_http_client/include/esp_http_client.h:
+
+C:/msys32/home/AllyKalaf/esp/esp-idf/components/nghttp/port/include/http_parser.h:
 /home/AllyKalaf/ESP32-bridge/main/./hello_world_main.c:

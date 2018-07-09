@@ -21,7 +21,7 @@
 #include "nvs_flash.h"
 #include "lwip/err.h"
 #include "lwip/sys.h"
-
+#include "esp_http_client.h"
 
 
 
@@ -36,6 +36,7 @@
 static const char *UARTTAG = "UART_events";
 static const char *SYSTAG = "ESP32_system";
 static const char *WIFITAG = "WIFI";
+static const char *HTTPTAG = "HTTP_CLIENT";
 #define PATTERN_CHR_NUM    (3)         /*!< Set the number of consecutive and identical characters received by receiver which defines a UART pattern*/
 #define BUF_SIZE (1024)
 #define RD_BUF_SIZE (BUF_SIZE)
@@ -55,14 +56,21 @@ QueueHandle_t xUart2Queue;
 EventGroupHandle_t wifi_event_group;
 
 /* ===================================================================
+  Global Variables
+ ===================================================================*/
+extern const char howsmyssl_com_root_cert_pem_start[] asm("_binary_howsmyssl_com_root_cert_pem_start");
+extern const char howsmyssl_com_root_cert_pem_end[]   asm("_binary_howsmyssl_com_root_cert_pem_end");
+
+/* ===================================================================
   Function Prototyping
  ===================================================================*/
 void prvSetupHardware( void );
 static void vUartEventTask(void *pvParameters);
 static esp_err_t event_handler(void *ctx, system_event_t *event);
+static void vHttpTask(void *pvParameters);
+esp_err_t _http_event_handler(esp_http_client_event_t *evt);
 void wifi_init_sta(void);
 void uart2_init(void);
-
 
 
 void app_main()
@@ -73,6 +81,8 @@ void app_main()
     esp_log_level_set(UARTTAG, ESP_LOG_INFO);
     //Set Wifi log level
     esp_log_level_set(WIFITAG, ESP_LOG_INFO);
+
+    esp_log_level_set(HTTPTAG, ESP_LOG_DEBUG);
     
 
     ESP_LOGI(SYSTAG, "Initialing hardware");
@@ -81,13 +91,52 @@ void app_main()
 
     /*Task creation*/
     ESP_LOGI(SYSTAG, "Creating FreeRTOS tasks");
-    //xTaskCreatePinnedToCore( vHttpTask, "Http Task", configMINIMAL_STACK_SIZE+8000, NULL, 2, NULL, CORE_0 );  //https 
+    xTaskCreatePinnedToCore( vHttpTask, "Http Task", configMINIMAL_STACK_SIZE+8000, NULL, 2, NULL, CORE_0 );  //https 
     //xTaskCreatePinnedToCore( vUartTask, "Uart Task", configMINIMAL_STACK_SIZE+1000, NULL, 2, NULL, CORE_1 );  //Uart
     xTaskCreatePinnedToCore( vUartEventTask, "Event Task", configMINIMAL_STACK_SIZE+2048, NULL, 12, NULL, CORE_1); // Uart Event Handler
 
     /*Queue creation*/ 
 
 
+}
+
+static void vHttpTask(void *pvParameters)
+{
+    xEventGroupWaitBits(wifi_event_group, WIFI_CONNECTED_BIT, false, true, portMAX_DELAY);
+    ESP_LOGI(HTTPTAG, "Connected to AP, begin http application");
+
+
+    esp_http_client_config_t config = {
+        .url = "https://api.thingspeak.com/update?api_key=CQ9JTUGI7K5BQDX6",
+        .event_handler = _http_event_handler,
+    };
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+
+    while(1)
+    {
+
+        /* Post the value 50 on my ThingSpeak account*/
+      const char *post_data = "{field1:50}";
+      //esp_http_client_set_header(client, "Connection", "close");
+      esp_http_client_set_method(client, HTTP_METHOD_POST);
+      esp_http_client_set_post_field(client, post_data, strlen(post_data));
+      esp_http_client_set_header(client, "Content-Type", "application/json" );
+      esp_err_t err = esp_http_client_perform(client);
+      ESP_ERROR_CHECK(err);
+      if (err == ESP_OK) {
+           ESP_LOGI(HTTPTAG, "HTTP POST Status = %d, content_length = %d field = %d",
+                  esp_http_client_get_status_code(client),
+                  esp_http_client_get_content_length(client), 50);
+      } else {
+           ESP_LOGE(HTTPTAG, "HTTP POST request failed: %s", esp_err_to_name(err));
+           vTaskDelete(NULL);
+      }
+      //esp_http_client_cleanup(client);
+
+
+      vTaskDelay( pdMS_TO_TICKS( 3000 ) );
+
+    }
 }
 
 static void vUartEventTask(void *pvParameters)
@@ -204,6 +253,40 @@ static esp_err_t event_handler(void *ctx, system_event_t *event)
         break;
     default:
         break;
+    }
+    return ESP_OK;
+}
+
+
+esp_err_t _http_event_handler(esp_http_client_event_t *evt)
+{
+    switch(evt->event_id) {
+        case HTTP_EVENT_ERROR:
+            ESP_LOGD(HTTPTAG, "HTTP_EVENT_ERROR");
+            break;
+        case HTTP_EVENT_ON_CONNECTED:
+            ESP_LOGD(HTTPTAG, "HTTP_EVENT_ON_CONNECTED");
+            break;
+        case HTTP_EVENT_HEADER_SENT:
+            ESP_LOGD(HTTPTAG, "HTTP_EVENT_HEADER_SENT");
+            break;
+        case HTTP_EVENT_ON_HEADER:
+            ESP_LOGD(HTTPTAG, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
+            break;
+        case HTTP_EVENT_ON_DATA:
+            ESP_LOGD(HTTPTAG, "HTTP_EVENT_ON_DATA, len=%d", evt->data_len);
+            if (!esp_http_client_is_chunked_response(evt->client)) {
+                // Write out data
+                // printf("%.*s", evt->data_len, (char*)evt->data);
+            }
+
+            break;
+        case HTTP_EVENT_ON_FINISH:
+            ESP_LOGD(HTTPTAG, "HTTP_EVENT_ON_FINISH");
+            break;
+        case HTTP_EVENT_DISCONNECTED:
+            ESP_LOGD(HTTPTAG, "HTTP_EVENT_DISCONNECTED");
+            break;
     }
     return ESP_OK;
 }
