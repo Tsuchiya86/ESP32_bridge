@@ -154,7 +154,7 @@ static void vHttpTask(void *pvParameters)
       
     }
 }
-
+//asdasdads
 static void vUartEventTask(void *pvParameters)
 {
     xQueuePackage queue;
