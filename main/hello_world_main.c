@@ -21,8 +21,25 @@
 #include "nvs_flash.h"
 #include "lwip/err.h"
 #include "lwip/sys.h"
+//#include "json/cJSON.h"
 #include "esp_http_client.h"
 
+/* Define the data type that will be queued. */
+typedef struct xQueuePackageCtrl
+{
+    unsigned char ucSender;
+    unsigned char ucQueueCode;
+    unsigned char ucPayload_type;
+    unsigned char ucPayload_size;
+
+    union 
+    {
+      int   intdata [2];
+      char  chardata[8];
+      void* pointer;
+    }Payload;
+
+} xQueuePackage;
 
 
 /* ===================================================================
@@ -30,8 +47,10 @@
  ===================================================================*/
 #define CORE_0 0 
 #define CORE_1 1  
-#define CUSTOM_ESP_WIFI_SSID      "Caverna do Dragao_Room"
-#define CUSTOM_ESP_WIFI_PASS      "BANANAchesterLANCER" 
+#define CUSTOM_ESP_WIFI_SSID      "BrunoAp"
+#define CUSTOM_ESP_WIFI_PASS      "uimo0239"
+#define IO_USERNAME  "Tsuchiya86"
+#define IO_KEY       "e3470a4f71274bb09f141bf0f7bac5bb"
 #define DEBUG 0
 static const char *UARTTAG = "UART_events";
 static const char *SYSTAG = "ESP32_system";
@@ -41,6 +60,11 @@ static const char *HTTPTAG = "HTTP_CLIENT";
 #define BUF_SIZE (1024)
 #define RD_BUF_SIZE (BUF_SIZE)
 
+
+
+/* Define the queue parameters. */
+#define QUEUE_LENGTH 5
+#define QUEUE_ITEM_SIZE sizeof( xQueuePackage )
 
 /* ===================================================================
   Define Event Group Flags
@@ -53,6 +77,7 @@ const int WIFI_CONNECTED_BIT = BIT0;
  ===================================================================*/
 uart_config_t xUart2Config;
 QueueHandle_t xUart2Queue;
+QueueHandle_t xHttpQueue;
 EventGroupHandle_t wifi_event_group;
 
 /* ===================================================================
@@ -92,6 +117,11 @@ void app_main()
     /*Task creation*/
     ESP_LOGI(SYSTAG, "Creating FreeRTOS tasks");
     xTaskCreatePinnedToCore( vHttpTask, "Http Task", configMINIMAL_STACK_SIZE+8000, NULL, 2, NULL, CORE_0 );  //https 
+    xHttpQueue =  xQueueCreate(QUEUE_LENGTH , QUEUE_ITEM_SIZE);
+    if (xHttpQueue == NULL)
+    {
+      ESP_LOGE(SYSTAG, "Unable to create the queue, try to increase the heap memory");
+    }
     //xTaskCreatePinnedToCore( vUartTask, "Uart Task", configMINIMAL_STACK_SIZE+1000, NULL, 2, NULL, CORE_1 );  //Uart
     xTaskCreatePinnedToCore( vUartEventTask, "Event Task", configMINIMAL_STACK_SIZE+2048, NULL, 12, NULL, CORE_1); // Uart Event Handler
 
@@ -102,31 +132,35 @@ void app_main()
 
 static void vHttpTask(void *pvParameters)
 {
+    xQueuePackage queue;
+
     xEventGroupWaitBits(wifi_event_group, WIFI_CONNECTED_BIT, false, true, portMAX_DELAY);
     ESP_LOGI(HTTPTAG, "Connected to AP, begin http application");
 
 
     esp_http_client_config_t config = {
-        .url = "https://api.thingspeak.com/update?api_key=CQ9JTUGI7K5BQDX6",
+        .url = "https://io.adafruit.com/api/v2/Tsuchiya86/feeds/temperature/data",
         .event_handler = _http_event_handler,
     };
     esp_http_client_handle_t client = esp_http_client_init(&config);
 
     while(1)
     {
-
-        /* Post the value 50 on my ThingSpeak account*/
-      const char *post_data = "{field1:50}";
+      ESP_LOGI(HTTPTAG, "Wait data to be received from UART");
+      xQueueReceive(xHttpQueue, &queue, portMAX_DELAY);
+        /* Post the received value on my IO adafruit account*/
+      const char *post_data = "{\"value\": 24}";
       //esp_http_client_set_header(client, "Connection", "close");
       esp_http_client_set_method(client, HTTP_METHOD_POST);
       esp_http_client_set_post_field(client, post_data, strlen(post_data));
       esp_http_client_set_header(client, "Content-Type", "application/json" );
+      esp_http_client_set_header(client, "X-AIO-Key", IO_KEY );
       esp_err_t err = esp_http_client_perform(client);
       ESP_ERROR_CHECK(err);
       if (err == ESP_OK) {
            ESP_LOGI(HTTPTAG, "HTTP POST Status = %d, content_length = %d field = %d",
                   esp_http_client_get_status_code(client),
-                  esp_http_client_get_content_length(client), 50);
+                  esp_http_client_get_content_length(client), 24);
       } else {
            ESP_LOGE(HTTPTAG, "HTTP POST request failed: %s", esp_err_to_name(err));
            vTaskDelete(NULL);
@@ -134,13 +168,14 @@ static void vHttpTask(void *pvParameters)
       //esp_http_client_cleanup(client);
 
 
-      vTaskDelay( pdMS_TO_TICKS( 3000 ) );
+      vTaskDelay( pdMS_TO_TICKS( 20000 ) );
 
     }
 }
 
 static void vUartEventTask(void *pvParameters)
 {
+    xQueuePackage queue;
     uart_event_t event;
     static bool pattern_detec_flag = false;
     size_t buffered_size;
@@ -161,7 +196,11 @@ static void vUartEventTask(void *pvParameters)
                       ESP_LOGI(UARTTAG, "[UART DATA]: %d", event.size);
                       uart_read_bytes(UART_NUM_2, dtmp, event.size, portMAX_DELAY);
                       ESP_LOGI(UARTTAG, "[DATA EVT]:");
-                      uart_write_bytes(UART_NUM_2, (const char*) dtmp, event.size);
+                      //Wait 20 ticks for space. if available, send the received data to the http task
+                      queue.ucQueueCode = 1;
+                      memcpy(queue.Payload.chardata, dtmp, 3);
+                      xQueueSend(xHttpQueue, &queue, 20);
+                      //uart_write_bytes(UART_NUM_2, (const char*) dtmp, event.size);
                       pattern_detec_flag = false;
                     }
                     break;
