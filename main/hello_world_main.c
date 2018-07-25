@@ -34,8 +34,7 @@ typedef struct xQueuePackageCtrl
 
     union 
     {
-      int   intdata [2];
-      char  chardata[8];
+      char  chardata[30];
       void* pointer;
     }Payload;
 
@@ -96,7 +95,7 @@ static void vHttpTask(void *pvParameters);
 esp_err_t _http_event_handler(esp_http_client_event_t *evt);
 void wifi_init_sta(void);
 void uart2_init(void);
-
+int iAdafruitPost (char* data, char* feeds);
 
 void app_main()
 {
@@ -116,7 +115,7 @@ void app_main()
 
     /*Task creation*/
     ESP_LOGI(SYSTAG, "Creating FreeRTOS tasks");
-    xTaskCreatePinnedToCore( vHttpTask, "Http Task", configMINIMAL_STACK_SIZE+8000, NULL, 2, NULL, CORE_0 );  //https 
+    xTaskCreatePinnedToCore( vHttpTask, "Http Task", configMINIMAL_STACK_SIZE+9000, NULL, 2, NULL, CORE_0 );  //https 
     xHttpQueue =  xQueueCreate(QUEUE_LENGTH , QUEUE_ITEM_SIZE);
     if (xHttpQueue == NULL)
     {
@@ -133,43 +132,26 @@ void app_main()
 static void vHttpTask(void *pvParameters)
 {
     xQueuePackage queue;
+    //char post_data[10];
+    char * ret;
 
     xEventGroupWaitBits(wifi_event_group, WIFI_CONNECTED_BIT, false, true, portMAX_DELAY);
     ESP_LOGI(HTTPTAG, "Connected to AP, begin http application");
-
-
-    esp_http_client_config_t config = {
-        .url = "https://io.adafruit.com/api/v2/Tsuchiya86/feeds/temperature/data",
-        .event_handler = _http_event_handler,
-    };
-    esp_http_client_handle_t client = esp_http_client_init(&config);
 
     while(1)
     {
       ESP_LOGI(HTTPTAG, "Wait data to be received from UART");
       xQueueReceive(xHttpQueue, &queue, portMAX_DELAY);
         /* Post the received value on my IO adafruit account*/
-      const char *post_data = "{\"value\": 24}";
-      //esp_http_client_set_header(client, "Connection", "close");
-      esp_http_client_set_method(client, HTTP_METHOD_POST);
-      esp_http_client_set_post_field(client, post_data, strlen(post_data));
-      esp_http_client_set_header(client, "Content-Type", "application/json" );
-      esp_http_client_set_header(client, "X-AIO-Key", IO_KEY );
-      esp_err_t err = esp_http_client_perform(client);
-      ESP_ERROR_CHECK(err);
-      if (err == ESP_OK) {
-           ESP_LOGI(HTTPTAG, "HTTP POST Status = %d, content_length = %d field = %d",
-                  esp_http_client_get_status_code(client),
-                  esp_http_client_get_content_length(client), 24);
-      } else {
-           ESP_LOGE(HTTPTAG, "HTTP POST request failed: %s", esp_err_to_name(err));
-           vTaskDelete(NULL);
+      ret = strchr(queue.Payload.chardata, ':');
+      if(ret != NULL)
+      {
+         *ret = 0;
+         ret++;
+         ESP_LOGI(HTTPTAG, "feed: %s value: %s",queue.Payload.chardata, ret);
+         iAdafruitPost(ret, queue.Payload.chardata);
       }
-      //esp_http_client_cleanup(client);
-
-
-      vTaskDelay( pdMS_TO_TICKS( 20000 ) );
-
+      
     }
 }
 
@@ -198,7 +180,7 @@ static void vUartEventTask(void *pvParameters)
                       ESP_LOGI(UARTTAG, "[DATA EVT]:");
                       //Wait 20 ticks for space. if available, send the received data to the http task
                       queue.ucQueueCode = 1;
-                      memcpy(queue.Payload.chardata, dtmp, 3);
+                      memcpy(queue.Payload.chardata, dtmp, 30);
                       xQueueSend(xHttpQueue, &queue, 20);
                       //uart_write_bytes(UART_NUM_2, (const char*) dtmp, event.size);
                       pattern_detec_flag = false;
@@ -389,4 +371,44 @@ void wifi_init_sta(void)
     ESP_LOGI(WIFITAG, "wifi_init_sta finished.");
     ESP_LOGI(WIFITAG, "connect to ap SSID:%s password:%s",
              CUSTOM_ESP_WIFI_SSID, CUSTOM_ESP_WIFI_PASS);
+}
+
+int iAdafruitPost (char* data, char* feeds)
+{
+      char post_data[20];
+      char api_url[70];
+      
+      sprintf (api_url,"https://io.adafruit.com/api/v2/Tsuchiya86/feeds/%s/data",feeds);
+
+      esp_http_client_config_t config = {
+        .url = api_url,
+        .event_handler = _http_event_handler,
+      };
+
+      esp_http_client_handle_t client = esp_http_client_init(&config);
+
+        /* Post the received value on my IO adafruit account*/
+      sprintf(post_data,"{\"value\": %s}", data);
+      //const char *post_data = "{\"value\": 50}";
+      ESP_LOGI(HTTPTAG, "{\"value\": %s}", data);
+      //esp_http_client_set_header(client, "Connection", "close");
+      esp_http_client_set_method(client, HTTP_METHOD_POST);
+      esp_http_client_set_post_field(client, post_data, strlen(post_data));
+      esp_http_client_set_header(client, "Content-Type", "application/json" );
+      esp_http_client_set_header(client, "X-AIO-Key", IO_KEY );
+      esp_err_t err = esp_http_client_perform(client);
+      ESP_ERROR_CHECK(err);
+      if (err == ESP_OK) {
+           ESP_LOGI(HTTPTAG, "HTTP POST Status = %d, content_length = %d field = %s",
+                  esp_http_client_get_status_code(client),
+                  esp_http_client_get_content_length(client), data);
+            return 1;
+      } else {
+           ESP_LOGE(HTTPTAG, "HTTP POST request failed: %s", esp_err_to_name(err));
+           vTaskDelete(NULL);
+           return 0;
+      }
+
+      esp_http_client_cleanup(client);
+
 }
