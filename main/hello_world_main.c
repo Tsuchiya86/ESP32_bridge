@@ -36,7 +36,7 @@ typedef struct xQueuePackageCtrl
     {
       char  chardata[30];
       void* pointer;
-    }Payload;
+    }xPayload;
 
 } xQueuePackage;
 
@@ -143,13 +143,13 @@ static void vHttpTask(void *pvParameters)
       ESP_LOGI(HTTPTAG, "Wait data to be received from UART");
       xQueueReceive(xHttpQueue, &queue, portMAX_DELAY);
         /* Post the received value on my IO adafruit account*/
-      ret = strchr(queue.Payload.chardata, ':');
+      ret = strchr(queue.xPayload.chardata, ':');
       if(ret != NULL)
       {
          *ret = 0;
          ret++;
-         ESP_LOGI(HTTPTAG, "feed: %s value: %s",queue.Payload.chardata, ret);
-         iAdafruitPost(ret, queue.Payload.chardata);
+         ESP_LOGI(HTTPTAG, "feed: %s value: %s",queue.xPayload.chardata, ret);
+         iAdafruitPost(ret, queue.xPayload.chardata);
       }
       
     }
@@ -180,7 +180,7 @@ static void vUartEventTask(void *pvParameters)
                       ESP_LOGI(UARTTAG, "[DATA EVT]:");
                       //Wait 20 ticks for space. if available, send the received data to the http task
                       queue.ucQueueCode = 1;
-                      memcpy(queue.Payload.chardata, dtmp, 30);
+                      memcpy(queue.xPayload.chardata, dtmp, 30);
                       xQueueSend(xHttpQueue, &queue, 20);
                       //uart_write_bytes(UART_NUM_2, (const char*) dtmp, event.size);
                       pattern_detec_flag = false;
