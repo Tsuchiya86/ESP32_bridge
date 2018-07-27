@@ -129,6 +129,15 @@ void app_main()
 
 }
 
+/*-------------------------------------------------------------------
+* @function <vHttpTask>
+*
+* @Description <Task para envio dos dados recebidos pela UART via 
+*               protocolo HTTP>
+*
+* @param [in] [pvParameters] <ponteiro doe tipo void para a entrada
+*                             de variáveis por referencia.>
+*--------------------------------------------------------------------*/
 static void vHttpTask(void *pvParameters)
 {
     xQueuePackage queue;
@@ -154,7 +163,16 @@ static void vHttpTask(void *pvParameters)
       
     }
 }
-//asdasdads
+
+/*-------------------------------------------------------------------
+* @function <vUartEventTask>
+*
+* @Description <Esta Task tem como objetivo tratar os eventos gerandos
+*               pela UART.>
+*
+* @param [in] [pvParameters] <ponteiro doe tipo void para a entrada
+*                             de variáveis por referencia.>
+*--------------------------------------------------------------------*/
 static void vUartEventTask(void *pvParameters)
 {
     xQueuePackage queue;
@@ -247,7 +265,15 @@ static void vUartEventTask(void *pvParameters)
     vTaskDelete(NULL);
 }
 
-
+/*-------------------------------------------------------------------
+* @function <event_handler>
+*
+* @Description <Função de callback utilizada para gerenciamento do event
+*               do client do Wifi>
+*
+* @param [in] [event] <ponteiro para o evente gerado pelo cliente
+*                      Wifi que será tratado na função.>
+*--------------------------------------------------------------------*/
 static esp_err_t event_handler(void *ctx, system_event_t *event)
 {
     switch(event->event_id) {
@@ -278,7 +304,15 @@ static esp_err_t event_handler(void *ctx, system_event_t *event)
     return ESP_OK;
 }
 
-
+/*-------------------------------------------------------------------
+* @function <event_handler>
+*
+* @Description <Função de callback utilizada para gerenciamento do event
+*               do client do Wifi>
+*
+* @param [in] [evt] <ponteiro para o evento da pilha HTTP que será tratada
+*                    pela função.>
+*--------------------------------------------------------------------*/
 esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 {
     switch(evt->event_id) {
@@ -311,6 +345,7 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt)
     }
     return ESP_OK;
 }
+
 
 void prvSetupHardware( void )
 {

@@ -1,5 +1,3 @@
-# Hello World Example
+# ESP32 Bridge Project
 
-Starts a FreeRTOS task to print "Hello World"
-
-See the README.md file in the upper level 'examples' directory for more information about examples.
+This project has the purpose of programming the ESP32 as by AT command sp the module can be used to post the received data on the Adafruit IoT plataform
